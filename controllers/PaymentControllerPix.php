@@ -24,7 +24,6 @@ class PayController {
     }
 
     public function createPayment() {
-        // Captura o user_id da sessão
         if (!isset($_SESSION['user_id'])) {
             echo "Erro: Usuário não está logado.";
             return;
@@ -45,7 +44,6 @@ class PayController {
             return;
         }
 
-        // Calcula o valor total da compra e prepara os itens para o pagamento
         $total = 0;
         $items = [];
         foreach ($carrinho as $item) {
@@ -58,25 +56,21 @@ class PayController {
             ];
         }
 
-        // Busca o usuário no banco de dados
         $user = $this->usercontrollerpix->getUserById($userId);
         if (!$user) {
             echo "Usuário não encontrado.";
             return;
         }
 
-        // Busca o endereço do usuário
         $address = $this->addressControllerpix->getAddressByUserId($userId);
         if (!$address) {
             echo "Endereço não encontrado.";
             return;
         }
 
-        // Define o token e a URL (produção ou sandbox)
         define('TOKEN', '279c9a74-9859-45cf-a74b-c336795236940fcf1fe54a438803fd2c2d6d9e80b69b3122-2b98-4396-a7b9-23aed7fc468c');
         define('URL', 'https://sandbox.api.pagseguro.com/orders');
 
-        // Define os campos a serem enviados ao PagSeguro
         $data = [
             'reference_id' => "pedido-{$userId}-" . time(),
             'customer' => [
@@ -96,7 +90,7 @@ class PayController {
             'qr_codes' => [
                 [
                     'amount' => [
-                        'value' => intval($total * 100) // Total convertido para centavos
+                        'value' => intval($total * 100)
                     ],
                     'expiration' => '2023-03-29T20:15:59-03:00'
                 ]
@@ -120,7 +114,6 @@ class PayController {
 
         $data = json_encode($data);
 
-        // Requisição de pagamento via cURL
         $curl = curl_init(URL);
         curl_setopt($curl, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . TOKEN,
@@ -133,30 +126,30 @@ class PayController {
         $response = curl_exec($curl);
         curl_close($curl);
 
-        // Debug: Verificando resposta da API
-        var_dump($response);
-
         $response = json_decode($response);
 
-        // Verifica se o QR Code foi gerado corretamente
+        // Verifica se o QR Code e a chave Pix foram gerados corretamente
         if (isset($response->qr_codes[0]->links[0]->href)) {
+            $qrCodeUrl = $response->qr_codes[0]->links[0]->href;
+            $pixKey = $response->qr_codes[0]->text;
+
             echo "<div id='qrcode'>";
-            echo "<img src='" . $response->qr_codes[0]->links[0]->href . "' alt='Qrcode Pix'>";
+            echo "<img src='" . $qrCodeUrl . "' alt='Qrcode Pix'>";
             echo "</div>";
+            echo "<p>Chave Pix: <strong>" . $pixKey . "</strong></p>";
+
+            // Remover o redirecionamento imediato e sugerir redirecionamento manual
+            echo "<p>Após o pagamento, <a href='login.php'>clique aqui para continuar</a>.</p>";
         } else {
             echo "<p>Erro ao gerar o QR Code.</p>";
         }
     }
 }
 
-// Exemplo de uso
 $productcontrollerpix = new ProductControllerPix($pdo);
 $usercontrollerpix = new UserControllerPix($pdo);
 $addressControllerpix = new AddressControllerPix($pdo);
 
-// Instanciando o PayController
 $payController = new PayController($pdo, $productcontrollerpix, $usercontrollerpix, $addressControllerpix);
-
-// Chamada para criar o pagamento baseado no carrinho do usuário
 $payController->createPayment();
 ?>
